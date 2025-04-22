@@ -1,0 +1,54 @@
+import { BinaryReader, BinaryWriter } from "@bufbuild/protobuf/wire";
+import { AudioQuality, NetworkMeteredState, PlaybackAudioRouteOutputType, VideoQualitySetting } from "../misc/common.js";
+export declare const protobufPackage = "video_streaming";
+export interface ClientAbrState {
+    timeSinceLastManualFormatSelectionMs?: number | undefined;
+    lastManualDirection?: number | undefined;
+    lastManualSelectedResolution?: number | undefined;
+    detailedNetworkType?: number | undefined;
+    clientViewportWidth?: number | undefined;
+    clientViewportHeight?: number | undefined;
+    clientBitrateCapBytesPerSec?: number | undefined;
+    stickyResolution?: number | undefined;
+    clientViewportIsFlexible?: boolean | undefined;
+    bandwidthEstimate?: number | undefined;
+    minAudioQuality?: AudioQuality | undefined;
+    maxAudioQuality?: AudioQuality | undefined;
+    videoQualitySetting?: VideoQualitySetting | undefined;
+    audioRoute?: PlaybackAudioRouteOutputType | undefined;
+    playerTimeMs?: number | undefined;
+    timeSinceLastSeek?: number | undefined;
+    dataSaverMode?: boolean | undefined;
+    networkMeteredState?: NetworkMeteredState | undefined;
+    visibility?: number | undefined;
+    playbackRate?: number | undefined;
+    elapsedWallTimeMs?: number | undefined;
+    mediaCapabilities?: Uint8Array | undefined;
+    timeSinceLastActionMs?: number | undefined;
+    enabledTrackTypesBitfield?: number | undefined;
+    maxPacingRate?: number | undefined;
+    playerState?: number | undefined;
+    drcEnabled?: boolean | undefined;
+    Jda?: number | undefined;
+    qw?: number | undefined;
+    Ky?: number | undefined;
+    sabrReportRequestCancellationInfo?: number | undefined;
+    l?: boolean | undefined;
+    G7?: number | undefined;
+    preferVp9?: boolean | undefined;
+    qj?: number | undefined;
+    Hx?: number | undefined;
+    isPrefetch?: boolean | undefined;
+    sabrSupportQualityConstraints?: number | undefined;
+    sabrLicenseConstraint?: Uint8Array | undefined;
+    allowProximaLiveLatency?: number | undefined;
+    sabrForceProxima?: number | undefined;
+    Tqb?: number | undefined;
+    sabrForceMaxNetworkInterruptionDurationMs?: number | undefined;
+    audioTrackId?: string | undefined;
+}
+export declare const ClientAbrState: MessageFns<ClientAbrState>;
+export interface MessageFns<T> {
+    encode(message: T, writer?: BinaryWriter): BinaryWriter;
+    decode(input: BinaryReader | Uint8Array, length?: number): T;
+}
