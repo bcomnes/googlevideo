@@ -1,5 +1,6 @@
 import shaka from 'shaka-player/dist/shaka-player.ui.js';
-import { Innertube, UniversalCache, YT, Utils, Constants } from 'youtubei.js';
+import type { Types } from 'youtubei.js/web';
+import { Constants, Innertube, Platform, UniversalCache, Utils, YT } from 'youtubei.js/web';
 import { SabrStreamingAdapter } from 'googlevideo/sabr-streaming-adapter';
 import { buildSabrFormat } from 'googlevideo/utils';
 import { ShakaPlayerAdapter } from './ShakaPlayerAdapter.js';
@@ -16,10 +17,26 @@ const statusElement = document.getElementById('status') as HTMLDivElement;
 let player: shaka.Player;
 let sabrAdapter: SabrStreamingAdapter;
 let innertube: Innertube;
-let sessionPoTokenContentBinding: string | undefined;
-let sessionPoTokenCreationLock = false;
-let sessionPoToken: string | undefined;
+let playbackWebPoTokenContentBinding: string | undefined;
+let playbackWebPoTokenCreationLock = false;
+let playbackWebPoToken: string | undefined;
 let coldStartToken: string | undefined;
+
+Platform.shim.eval = async (data: Types.BuildScriptResult, env: Record<string, Types.VMPrimative>) => {
+  const properties = [];
+
+  if (env.n) {
+    properties.push(`n: exportedVars.nFunction("${env.n}")`);
+  }
+
+  if (env.sig) {
+    properties.push(`sig: exportedVars.sigFunction("${env.sig}")`);
+  }
+
+  const code = `${data.output}\nreturn { ${properties.join(', ')} }`;
+
+  return new Function(code)();
+};
 
 async function main() {
   shaka.polyfill.installAll();
@@ -37,8 +54,6 @@ async function main() {
   });
 
   botguardService.init().then(() => console.info('[Main]', 'BotGuard client initialized'));
-
-  sessionPoTokenContentBinding = innertube.session.context.client.visitorData;
 
   console.log('[Main] Innertube initialized');
 
@@ -77,8 +92,7 @@ async function main() {
   volumeContainer[0].addEventListener('mousewheel', (event) => {
     event.preventDefault();
     const delta = Math.sign((event as any).deltaY);
-    const newVolume = Math.max(0, Math.min(1, videoElement.volume - delta * 0.05));
-    videoElement.volume = newVolume;
+    videoElement.volume = Math.max(0, Math.min(1, videoElement.volume - delta * 0.05));
   });
 
   console.log('[Main] Shaka Player initialized');
@@ -94,6 +108,9 @@ async function loadVideo(videoId: string) {
     alert('Please enter a video ID.');
     return;
   }
+  
+  playbackWebPoToken = undefined;
+  playbackWebPoTokenContentBinding = videoId;
 
   statusElement.textContent = `Loading video: ${videoId}...`;
   console.log('[Player]', `Loading video: ${videoId}`);
@@ -116,7 +133,7 @@ async function loadVideo(videoId: string) {
           pyv: true
         },
         contentPlaybackContext: {
-          signatureTimestamp: innertube.session.player?.sts
+          signatureTimestamp: innertube.session.player?.signature_timestamp
         }
       }
     });
@@ -144,18 +161,18 @@ async function loadVideo(videoId: string) {
     });
 
     sabrAdapter.onMintPoToken(async () => {
-      if (!sessionPoToken) {
+      if (!playbackWebPoToken) {
         // For live streams, we must block and wait for the PO token as it's sometimes required for playback to start.
         // For VODs, we can mint the token in the background to avoid delaying playback, as it's not immediately required.
         // While BotGuard is pretty darn fast, it still makes a difference in user experience (from my own testing).
         if (isLive) {
-          await mintSessionPoToken();
+          await mintContentWebPO();
         } else {
-          mintSessionPoToken().then();
+          mintContentWebPO().then();
         }
       }
 
-      return sessionPoToken || coldStartToken || '';
+      return playbackWebPoToken || coldStartToken || '';
     });
 
     sabrAdapter.onReloadPlayerResponse(async (reloadContext) => {
@@ -170,21 +187,21 @@ async function loadVideo(videoId: string) {
             pyv: true
           },
           contentPlaybackContext: {
-            signatureTimestamp: innertube.session.player?.sts
+            signatureTimestamp: innertube.session.player?.signature_timestamp
           },
           reloadPlaybackContext: reloadContext
         }
       });
 
       const parsedInfo = new YT.VideoInfo([ reloadedInfo ], innertube.actions, cpn);
-      sabrAdapter.setStreamingURL(innertube.session.player!.decipher(parsedInfo.streaming_data?.server_abr_streaming_url));
+      sabrAdapter.setStreamingURL(await innertube.session.player!.decipher(parsedInfo.streaming_data?.server_abr_streaming_url));
       sabrAdapter.setUstreamerConfig(videoInfo.player_config?.media_common_config.media_ustreamer_request_config?.video_playback_ustreamer_config);
     });
 
     sabrAdapter.attach(player);
 
     if (videoInfo.streaming_data && !isPostLiveDVR && !isLive) {
-      sabrAdapter.setStreamingURL(innertube.session.player!.decipher(videoInfo.streaming_data?.server_abr_streaming_url));
+      sabrAdapter.setStreamingURL(await innertube.session.player!.decipher(videoInfo.streaming_data?.server_abr_streaming_url));
       sabrAdapter.setUstreamerConfig(videoInfo.player_config?.media_common_config.media_ustreamer_request_config?.video_playback_ustreamer_config);
       sabrAdapter.setServerAbrFormats(videoInfo.streaming_data.adaptive_formats.map(buildSabrFormat));
     }
@@ -219,24 +236,24 @@ async function loadVideo(videoId: string) {
   }
 }
 
-async function mintSessionPoToken() {
-  if (!sessionPoTokenContentBinding || sessionPoTokenCreationLock) return;
+async function mintContentWebPO() {
+  if (!playbackWebPoTokenContentBinding || playbackWebPoTokenCreationLock) return;
 
-  sessionPoTokenCreationLock = true;
+  playbackWebPoTokenCreationLock = true;
   try {
-    coldStartToken = botguardService.mintColdStartToken(sessionPoTokenContentBinding);
-    console.info('[Player]', `Cold start token created (Content binding: ${decodeURIComponent(sessionPoTokenContentBinding)})`);
+    coldStartToken = botguardService.mintColdStartToken(playbackWebPoTokenContentBinding);
+    console.info('[Player]', `Cold start token created (Content binding: ${decodeURIComponent(playbackWebPoTokenContentBinding)})`);
 
     if (!botguardService.isInitialized()) await botguardService.reinit();
 
     if (botguardService.integrityTokenBasedMinter) {
-      sessionPoToken = await botguardService.integrityTokenBasedMinter.mintAsWebsafeString(decodeURIComponent(sessionPoTokenContentBinding));
-      console.info('[Player]', `Session PO token created (Content binding: ${decodeURIComponent(sessionPoTokenContentBinding)})`);
+      playbackWebPoToken = await botguardService.integrityTokenBasedMinter.mintAsWebsafeString(decodeURIComponent(playbackWebPoTokenContentBinding));
+      console.info('[Player]', `WebPO token created (Content binding: ${decodeURIComponent(playbackWebPoTokenContentBinding)})`);
     }
   } catch (err) {
-    console.error('[Player]', 'Error minting session PO token', err);
+    console.error('[Player]', 'Error minting WebPO token', err);
   } finally {
-    sessionPoTokenCreationLock = false;
+    playbackWebPoTokenCreationLock = false;
   }
 }
 

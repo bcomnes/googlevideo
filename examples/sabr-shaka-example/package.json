@@ -12,7 +12,7 @@
     "bgutils-js": "^3.2.0",
     "googlevideo": "^4.0.4",
     "shaka-player": "^4.16.2",
-    "youtubei.js": "^15.1.1"
+    "youtubei.js": "^16.0.0"
   },
   "devDependencies": {
     "typescript": "^5.4.5",

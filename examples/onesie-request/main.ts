@@ -1,4 +1,5 @@
-import Innertube, { Constants, type Context, UniversalCache, YT } from 'youtubei.js';
+import type { Types } from 'youtubei.js';
+import Innertube, { Constants, type Context, Platform, UniversalCache, YT } from 'youtubei.js';
 import { UmpReader, CompositeBuffer } from 'googlevideo/ump';
 
 import {
@@ -25,6 +26,22 @@ type ClientConfig = {
 };
 
 type UmpPartHandler = (part: Part) => void;
+
+Platform.shim.eval = async (data: Types.BuildScriptResult, env: Record<string, Types.VMPrimative>) => {
+  const properties = [];
+
+  if (env.n) {
+    properties.push(`n: exportedVars.nFunction("${env.n}")`);
+  }
+
+  if (env.sig) {
+    properties.push(`sig: exportedVars.sigFunction("${env.sig}")`);
+  }
+
+  const code = `${data.output}\nreturn { ${properties.join(', ')} }`;
+
+  return new Function(code)();
+};
 
 const enableCompression = true;
 
@@ -87,7 +104,7 @@ async function prepareOnesieRequest(args: OnesieRequestArgs) {
         vis: 0,
         splay: false,
         lactMilliseconds: '-1',
-        signatureTimestamp: innertube.session.player?.sts
+        signatureTimestamp: innertube.session.player?.signature_timestamp
       }
     },
     videoId
@@ -302,7 +319,7 @@ const innertube = await Innertube.create({ cache: new UniversalCache(true), retr
 const videoInfo = await getBasicInfo(innertube, 'JAs6WyK-Kr0');
 console.log('Basic info:', videoInfo);
 console.log('Deciphered audio URL:');
-console.log(videoInfo.chooseFormat({
+console.log(await videoInfo.chooseFormat({
   format: 'mp4',
   quality: 'best',
   type: 'audio'

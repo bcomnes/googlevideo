@@ -1,10 +1,10 @@
 import { BG, type BgConfig } from 'bgutils-js';
 import { JSDOM } from 'jsdom';
 
-export async function generateWebPoToken(visitorData: string) {
+export async function generateWebPoToken(contentBinding: string) {
   const requestKey = 'O43z0dpjhgX20SCx4KAo';
 
-  if (!visitorData)
+  if (!contentBinding)
     throw new Error('Could not get visitor data');
 
   const dom = new JSDOM();
@@ -17,7 +17,7 @@ export async function generateWebPoToken(visitorData: string) {
   const bgConfig: BgConfig = {
     fetch: (input: string | URL | globalThis.Request, init?: RequestInit) => fetch(input, init),
     globalObj: globalThis,
-    identifier: visitorData,
+    identifier: contentBinding,
     requestKey
   };
 
@@ -38,10 +38,10 @@ export async function generateWebPoToken(visitorData: string) {
     bgConfig
   });
 
-  const placeholderPoToken = BG.PoToken.generatePlaceholder(visitorData);
+  const placeholderPoToken = BG.PoToken.generatePlaceholder(contentBinding);
 
   return {
-    visitorData,
+    visitorData: contentBinding,
     placeholderPoToken,
     poToken: poTokenResult.poToken,
   };

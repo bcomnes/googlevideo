@@ -1,6 +1,7 @@
 import { createWriteStream, type WriteStream } from 'node:fs';
 import cliProgress from 'cli-progress';
-import { Constants, Innertube, type IPlayerResponse, UniversalCache, YTNodes } from 'youtubei.js';
+import { Constants, Innertube, type IPlayerResponse, Platform, UniversalCache, YTNodes } from 'youtubei.js';
+import type { Types } from 'youtubei.js';
 
 import { generateWebPoToken } from './webpo-helper.js';
 import type { SabrFormat } from 'googlevideo/shared-types';
@@ -23,6 +24,22 @@ export interface StreamResults {
   videoTitle: string;
 }
 
+Platform.shim.eval = async (data: Types.BuildScriptResult, env: Record<string, Types.VMPrimative>) => {
+  const properties = [];
+
+  if (env.n) {
+    properties.push(`n: exportedVars.nFunction("${env.n}")`);
+  }
+
+  if (env.sig) {
+    properties.push(`sig: exportedVars.sigFunction("${env.sig}")`);
+  }
+
+  const code = `${data.output}\nreturn { ${properties.join(', ')} }`;
+
+  return new Function(code)();
+};
+
 /**
  * Fetches video details and streaming information from YouTube.
  */
@@ -36,7 +53,7 @@ export async function makePlayerRequest(innertube: Innertube, videoId: string, r
         vis: 0,
         splay: false,
         lactMilliseconds: '-1',
-        signatureTimestamp: innertube.session.player?.sts
+        signatureTimestamp: innertube.session.player?.signature_timestamp
       }
     },
     contentCheckOk: true,
@@ -150,7 +167,7 @@ export async function createSabrStream(
   streamResults: StreamResults;
 }> {
   const innertube = await Innertube.create({ cache: new UniversalCache(true) });
-  const webPoTokenResult = await generateWebPoToken(innertube.session.context.client.visitorData || '');
+  const webPoTokenResult = await generateWebPoToken(videoId);
 
   // Get video metadata.
   const playerResponse = await makePlayerRequest(innertube, videoId);
@@ -165,7 +182,7 @@ export async function createSabrStream(
   `);
 
   // Now get the streaming information.
-  const serverAbrStreamingUrl = innertube.session.player?.decipher(playerResponse.streaming_data?.server_abr_streaming_url);
+  const serverAbrStreamingUrl = await innertube.session.player?.decipher(playerResponse.streaming_data?.server_abr_streaming_url);
   const videoPlaybackUstreamerConfig = playerResponse.player_config?.media_common_config.media_ustreamer_request_config?.video_playback_ustreamer_config;
 
   if (!videoPlaybackUstreamerConfig) throw new Error('ustreamerConfig not found');
@@ -188,7 +205,7 @@ export async function createSabrStream(
   serverAbrStream.on('reloadPlayerResponse', async (reloadPlaybackContext) => {
     const playerResponse = await makePlayerRequest(innertube, videoId, reloadPlaybackContext);
 
-    const serverAbrStreamingUrl = innertube.session.player?.decipher(playerResponse.streaming_data?.server_abr_streaming_url);
+    const serverAbrStreamingUrl = await innertube.session.player?.decipher(playerResponse.streaming_data?.server_abr_streaming_url);
     const videoPlaybackUstreamerConfig = playerResponse.player_config?.media_common_config.media_ustreamer_request_config?.video_playback_ustreamer_config;
 
     if (serverAbrStreamingUrl && videoPlaybackUstreamerConfig) {
